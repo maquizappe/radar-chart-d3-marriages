@@ -1,0 +1,231 @@
+<!-- 
+
+    Adapted from Mike Bostock at bl.ocks.org
+    https://bl.ocks.org/mbostock/5682158
+
+ -->
+
+<!DOCTYPE html>
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="">
+    <title>7.7 - Pie and donut charts</title>
+    <!-- Bootstrap Core CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div class="containerTitle"  href="#">
+        <div class="subcontainer">
+            <h3 class="title"> Marriages by age range in the City of Buenos Aires</h3>
+            <div class="subtitle"> From 2003 to 2022 </div>
+        </div>
+    </div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script>
+ d3.csv("data/data2.csv").then(function (csvData) {
+    let features = [...new Set(csvData.map(d => d.year_range))];
+    // Create an empty data array to store the formatted data
+    let data = [];
+
+    // Loop through each row in the CSV data
+    csvData.forEach(function (row) {
+        // Extract the year_range and type values
+        let yearRange = row.year_range;
+        let value = +row.value;
+        let type = row.type;
+
+        // Find the object in the data array for the current type, or create a new one if it doesn't exist
+        let typeData = data.find(d => d.type === type);
+        if (!typeData) {
+            typeData = { type: type };
+            data.push(typeData);
+        }
+
+        // Add the value to the corresponding year_range within the type object
+        typeData[yearRange] = value;
+    });
+
+    // Remove the "type" key from each object in the data array
+    data.forEach(function (d) {
+        delete d.type;
+    });
+
+    console.log(data);
+    
+   
+    
+ 
+let maxDataValue = d3.max(data, d => d3.max(Object.values(d)));
+
+
+let width = 1100;
+let height = 650;
+let svg = d3.select("body").append("svg")
+.attr("width",width)
+.attr("height", height);
+
+let radialScale= d3.scaleLinear()
+.domain([0,maxDataValue])
+.range([0,250])
+let ticks= [5,10,15,20,25,30]
+
+// agregando los circulos del fondo
+svg.selectAll("circle")
+.data(ticks)
+.join(
+    enter => enter.append("circle")
+    .attr("cx", width/2)
+    .attr("cy", height /2)
+    .attr("fill", "none")
+    .attr("stroke", "#E9E8E8")
+    .attr("r", d => radialScale(d))
+)
+
+// agregando los ticks
+svg.selectAll(".ticklabel")
+    .data(ticks)
+    .join(
+        enter => enter.append("text")
+            .attr("class", "ticklabel")
+            .attr("x", width / 2 + 5)
+            .attr("y", d => height / 2 - radialScale(d))
+            .text(d => d.toString())
+            .text(d => `${d}%`)
+            .attr("fill", "#B7B7B7")
+    );
+
+// plotting the axes
+function angleToCoordinate(angle, value){
+    let x = Math.cos(angle) * radialScale(value);
+    let y = Math.sin(angle) * radialScale(value);
+    return {"x": width / 2 + x, "y": height / 2 - y};
+}
+
+let featureData = features.map((f, i) => {
+    let angle = (Math.PI / 2) + (2 * Math.PI * i / features.length);
+    return {
+        "name": f,
+        "angle": angle,
+        "line_coord": angleToCoordinate(angle, 30), // Increase scaling factor for lines
+        "label_coord": angleToCoordinate(angle, 34) // Increase scaling factor for labels
+    };
+});
+
+// draw axis line
+svg.selectAll("line")
+    .data(featureData)
+    .join(
+        enter => enter.append("line")
+            .attr("x1", width / 2)
+            .attr("y1", height / 2)
+            .attr("x2", d => d.line_coord.x)
+            .attr("y2", d => d.line_coord.y)
+            .attr("stroke","#B7B7B7")
+    );
+
+// draw axis label
+svg.selectAll(".axislabel")
+    .data(featureData)
+    .join(
+        enter => enter.append("text")
+            .attr("x", d => d.label_coord.x)
+            .attr("y", d => d.label_coord.y)
+            .text(d => d.name)
+            .style("font-size", "12px")
+            .attr("fill", "gray")
+    );
+
+// Dibujando el gráfico
+
+let line = d3.line()
+    .x(d => d.x)
+    .y(d => d.y)
+    .curve(d3.curveNatural);
+
+    
+    
+let colors = ["#FFC502", "#FF8800", "navy"];
+let colorslight = ["rgba(255,197,2,0.4)", "rgba(255,136,0,0.4)", "navy"];
+
+function getPathCoordinates(data_point){
+    let coordinates = [];
+    for (var i = 0; i < features.length; i++){
+        let ft_name = features[i];
+        let angle = (Math.PI / 2) + (2 * Math.PI * i / features.length);
+        coordinates.push(angleToCoordinate(angle, data_point[ft_name]));
+    }
+    return coordinates;
+}
+svg.selectAll("path")
+    .data(data)
+    .join(
+        enter => enter.append("path")
+            .datum(d => getPathCoordinates(d))
+            .attr("d", line)
+            .attr("stroke-width", 3)
+            .attr("stroke", (_, i) => colorslight[i])
+            .attr("fill", (_, i) => colorslight[i])
+            .attr("stroke-opacity", 1)
+            .attr("opacity", 0.4)
+    );
+
+// Append circles (for each data point in each data series)
+data.forEach(function (seriesData, seriesIndex) {
+    features.forEach(function (yearRange, yearIndex) {
+        let dot = svg.append("circle")
+            .attr("class", "dot")
+            .attr("cx", () => {
+                let coordinate = getPathCoordinates(seriesData);
+                return coordinate[yearIndex].x;
+            })
+            .attr("cy", () => {
+                let coordinate = getPathCoordinates(seriesData);
+                return coordinate[yearIndex].y;
+            })
+            .attr("r", 5) // Adjust the radius as needed
+            .attr("fill", colors[seriesIndex]);
+
+    });
+});
+
+let legend = svg.append("g")
+    .attr("class", "legend")
+    .attr("transform", `translate(${width * 0.88}, ${height / 2})`); // Adjust the position as needed
+
+// Add circles and text for each type in the legend
+data.forEach(function (seriesData, seriesIndex) {
+    let legendItem = legend.append("g")
+        .attr("class", "legend-item")
+        .attr("transform", `translate(0, ${seriesIndex * 20})`); // Adjust vertical spacing as needed
+
+    // Add circles with colors
+    legendItem.append("circle")
+        .attr("class", "legend-circle")
+        .attr("cx", 0)
+        .attr("cy", 0)
+        .attr("r", 5) // Adjust the radius as needed
+        .attr("fill", colors[seriesIndex]);
+
+    // Add text labels
+    legendItem.append("text")
+    .attr("class", "legend-label")
+    .attr("x", 20) // Adjust horizontal spacing as needed
+    .attr("dy", "0.32em") // Vertical alignment for the text
+    .text(seriesIndex === 0 ? "Woman-Woman" : seriesIndex === 1 ? "Man-Man" : "Man-Woman")
+    .style("font-size", "12px")
+    .attr("fill", "gray");
+});
+   
+
+  })   
+
+</script>
+
+</body>
+
+
